@@ -3,7 +3,6 @@ Download and write complete list of heureka categories.
 Download and write top products for each of them.
 """
 
-
 import csv
 import logging
 import os
@@ -71,16 +70,15 @@ def main():
     cfg = docker.Config()
     params = cfg.get_parameters()
     logger.info("Extracted parameters.")
-    api_url = params.get("api_url")
     api_key = params.get("#api_key")
-
-    categories = get_categories_list(url=api_url, key=api_key)
+    countries = params.get("countries")
 
     # output the category list
     with open(f"{datadir}out/tables/heureka_categories_list.csv", "w") as outfile:
         dict_writer = csv.DictWriter(
             outfile,
             fieldnames=[
+                "country",
                 "id",
                 "parent_id",
                 "name",
@@ -91,26 +89,39 @@ def main():
             ],
         )
         dict_writer.writeheader()
-        dict_writer.writerows(categories)
+
+        categories_full = []
+        for country in list(countries.keys()):
+            categories = get_categories_list(url=countries[country], key=api_key)
+            for row in categories:
+                row_amended = {"country": country, **row}
+                dict_writer.writerow(row_amended)
+                categories_full.append(row_amended)
 
     logger.info("Written category list.")
 
     # output individual top products with their category ids
     with open(f"{datadir}out/tables/heureka_top_products.csv", "w") as outfile:
         dict_writer = csv.DictWriter(
-            outfile, fieldnames=["id", "name", "slug", "url", "category_id"],
+            outfile, fieldnames=["country", "id", "name", "slug", "url", "category_id"],
         )
         dict_writer.writeheader()
-        for category in categories:
+        for category in categories_full:
             logger.info(f"Downloading category {category['name']}.")
             category_detail = get_category_detail(
-                url=api_url, key=api_key, category_id=int(category["id"])
+                url=countries[category["country"]],
+                key=api_key,
+                category_id=int(category["id"]),
             )
             top_products = category_detail["top_products"]
             # some categories categories have no top products
             # in their case, nothing gets written here
             for row in top_products:
-                row_amended = {"category_id": category["id"], **row}
+                row_amended = {
+                    "country": category["country"],
+                    "category_id": category["id"],
+                    **row,
+                }
                 dict_writer.writerow(row_amended)
 
     logger.info("Script completed.")
